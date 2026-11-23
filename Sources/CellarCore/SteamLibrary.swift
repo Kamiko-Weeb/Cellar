@@ -52,8 +52,9 @@ public enum SteamLibrary {
             let entries = VDF.parse(text)["libraryfolders"]?.children.values.map { $0 } ?? []
             folders += entries.compactMap { $0["path"]?.value }.compactMap(bottle.macURL(forWindowsPath:))
         }
+        // A library on a drive that isn't plugged in (or whose drive letter is gone) is skipped quietly.
         var seen = Set<String>()
-        return folders.filter { seen.insert($0.standardizedFileURL.path).inserted }
+        return folders.filter { FileManager.default.fileExists(atPath: $0.path) && seen.insert($0.standardizedFileURL.path).inserted }
     }
 
     static func artwork(for appID: Int, steamRoot: URL) -> URL? {

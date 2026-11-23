@@ -13,33 +13,71 @@ final class BottleStore {
     private(set) var settings: [Bottle.ID: BottleSettings] = [:]
     var errorMessage: String?
     @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
     init(polling: Bool = true) {
         reload()
         guard polling else { return }
-        // Cheap enough to rescan: picks up games Steam finishes installing and bottles starting or stopping.
-        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reload() }
-        }
+        startPolling()
+        // Only poll while Cellar is in front, so a game gets the whole Mac.
+        let center = NotificationCenter.default
+        observers = [
+            center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.stopPolling() }
+            },
+            center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.reload()
+                    self?.startPolling()
+                }
+            },
+        ]
     }
 
     var selectedBottle: Bottle? { bottles.first { $0.id == selection } }
 
+    /// Full scan of every bottle: on launch, on coming back to Cellar, and after actions that change bottles.
     func reload() {
         let found = Bottle.discover(in: Bottle.defaultFolder)
         if found != bottles { bottles = found }
-        let commands = Wine.processCommands()
-        let nowRunning = Set(found.filter { Wine.isRunning($0, among: commands) }.map(\.id))
-        if nowRunning != running { running = nowRunning }
-        for bottle in found {
-            let bottleGames = SteamLibrary.installedGames(in: bottle)
-            if games[bottle.id] != bottleGames { games[bottle.id] = bottleGames }
-            let bottleShortcuts = Shortcuts.find(in: bottle)
-            if shortcuts[bottle.id] != bottleShortcuts { shortcuts[bottle.id] = bottleShortcuts }
-            let bottleSettings = try? BottleSettings.load(from: bottle.infoPlist)
-            if settings[bottle.id] != bottleSettings { settings[bottle.id] = bottleSettings }
-        }
+        refreshRunning()
+        for bottle in found { scan(bottle) }
         if selectedBottle == nil { selection = found.first?.id }
+    }
+
+    private func startPolling() {
+        guard timer == nil else { return }
+        // Picks up bottles starting or stopping and games Steam finishes installing in the bottle on screen.
+        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }
+        }
+    }
+
+    private func stopPolling() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func tick() {
+        refreshRunning()
+        if let bottle = selectedBottle { scan(bottle) }
+    }
+
+    /// The cheap part: one `ps` call.
+    private func refreshRunning() {
+        let commands = Wine.processCommands()
+        let nowRunning = Set(bottles.filter { Wine.isRunning($0, among: commands) }.map(\.id))
+        if nowRunning != running { running = nowRunning }
+    }
+
+    /// The expensive part: Steam manifests, Start Menu shortcuts, settings and artwork for one bottle.
+    private func scan(_ bottle: Bottle) {
+        let bottleGames = SteamLibrary.installedGames(in: bottle)
+        if games[bottle.id] != bottleGames { games[bottle.id] = bottleGames }
+        let bottleShortcuts = Shortcuts.find(in: bottle)
+        if shortcuts[bottle.id] != bottleShortcuts { shortcuts[bottle.id] = bottleShortcuts }
+        let bottleSettings = try? BottleSettings.load(from: bottle.infoPlist)
+        if settings[bottle.id] != bottleSettings { settings[bottle.id] = bottleSettings }
     }
 
     /// Opened through macOS like a double-click, so the bottle runs under its own
@@ -66,6 +104,7 @@ final class BottleStore {
         panel.allowedContentTypes = ["exe", "msi", "bat", "lnk"].compactMap { UTType(filenameExtension: $0) }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         perform { try Wine.run(url, in: bottle) }
+        reload()
     }
 
     func stop(_ bottle: Bottle) {

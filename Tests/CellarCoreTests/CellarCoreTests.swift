@@ -118,6 +118,28 @@ struct SteamLibraryTests {
         #expect(games.first?.sizeOnDisk == 1_048_576)
     }
 
+    @Test func skipsLibrariesOnDrivesThatAreUnplugged() throws {
+        let fixture = try BottleFixture()
+        let steam = "Program Files (x86)/Steam"
+        let unplugged = fixture.root.appending(path: "Volumes/Extreme SSD")
+        // D: still points at the SSD's mount point, but the SSD isn't there. E: has no drive link at all.
+        try FileManager.default.createSymbolicLink(atPath: fixture.bottle.contents.appending(path: "dosdevices/d:").path, withDestinationPath: unplugged.path)
+        try fixture.write("", to: "\(steam)/steam.exe")
+        try fixture.write("""
+        "libraryfolders"
+        {
+            "0" { "path" "C:\\\\Program Files (x86)\\\\Steam" }
+            "1" { "path" "D:\\\\SteamLibrary" }
+            "2" { "path" "E:\\\\Games" }
+        }
+        """, to: "\(steam)/steamapps/libraryfolders.vdf")
+        try fixture.write(fixture.manifest(appID: 620, name: "Portal 2", flags: 4), to: "\(steam)/steamapps/appmanifest_620.acf")
+
+        let root = try #require(SteamLibrary.steamRoot(in: fixture.bottle))
+        #expect(SteamLibrary.libraryFolders(steamRoot: root, bottle: fixture.bottle) == [root])
+        #expect(SteamLibrary.installedGames(in: fixture.bottle).map(\.name) == ["Portal 2"])
+    }
+
     @Test func bottleWithoutSteamHasNoGames() throws {
         let fixture = try BottleFixture(name: "Office")
         #expect(SteamLibrary.steamRoot(in: fixture.bottle) == nil)
