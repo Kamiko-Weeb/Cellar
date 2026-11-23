@@ -14,11 +14,17 @@ final class BottleStore {
     var errorMessage: String?
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    @ObservationIgnored private var logTimer: Timer?
 
     init(polling: Bool = true) {
         reload()
         guard polling else { return }
         startPolling()
+        // Keeps Wine logs to a few MB during long sessions. Runs in the background too, but it's one
+        // file-size check per bottle with logging on, and nothing at all otherwise.
+        logTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.capLogs() }
+        }
         // Only poll while Cellar is in front, so a game gets the whole Mac.
         let center = NotificationCenter.default
         observers = [
@@ -43,6 +49,7 @@ final class BottleStore {
         refreshRunning()
         for bottle in found { scan(bottle) }
         if selectedBottle == nil { selection = found.first?.id }
+        capLogs()
     }
 
     private func startPolling() {
@@ -83,6 +90,8 @@ final class BottleStore {
     /// Opened through macOS like a double-click, so the bottle runs under its own
     /// privacy permissions (Documents, removable drives) rather than Cellar's.
     func launchMain(_ bottle: Bottle) {
+        // A running bottle is only brought to the front, so its launcher doesn't start over.
+        if !running.contains(bottle.id) { preserveLog(of: bottle) }
         NSWorkspace.shared.openApplication(at: bottle.url, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, error in
             guard let error else { return }
             Task { @MainActor in self?.errorMessage = error.localizedDescription }
@@ -90,10 +99,12 @@ final class BottleStore {
     }
 
     func play(_ game: SteamGame, in bottle: Bottle) {
+        preserveLog(of: bottle)
         perform { try Wine.play(appID: game.appID, in: bottle) }
     }
 
     func launch(_ shortcut: Shortcut, in bottle: Bottle) {
+        preserveLog(of: bottle)
         perform { try Wine.run(shortcut.url, in: bottle) }
     }
 
@@ -103,6 +114,7 @@ final class BottleStore {
         panel.prompt = "Run"
         panel.allowedContentTypes = ["exe", "msi", "bat", "lnk"].compactMap { UTType(filenameExtension: $0) }
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        preserveLog(of: bottle)
         perform { try Wine.run(url, in: bottle) }
         reload()
     }
@@ -128,6 +140,7 @@ final class BottleStore {
     }
 
     func openWineConfiguration(_ bottle: Bottle) {
+        preserveLog(of: bottle)
         perform { try Wine.openWineConfiguration(bottle) }
     }
 
@@ -140,6 +153,17 @@ final class BottleStore {
         let bottle = try await BottleFactory.create(named: name, status: status)
         reload()
         selection = bottle.id
+    }
+
+    /// Every launcher run empties LastRunWine.log, so copy it aside first when the bottle keeps one.
+    private func preserveLog(of bottle: Bottle) {
+        if settings[bottle.id]?.logWineOutput == true { WineLog.preserve(bottle) }
+    }
+
+    private func capLogs() {
+        for bottle in bottles where settings[bottle.id]?.logWineOutput == true {
+            WineLog.enforceLimit(bottle)
+        }
     }
 
     private func perform(_ action: () throws -> Void) {

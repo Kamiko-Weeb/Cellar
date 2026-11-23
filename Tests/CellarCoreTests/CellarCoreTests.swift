@@ -319,3 +319,84 @@ struct BottleFactoryTests {
         #expect(Bottle(url: fixture.bottle.url).name == "Epic Games")
     }
 }
+
+struct WineLogTests {
+    @Test func loggingToggleWritesDebugModeAndWineDebug() throws {
+        let fixture = try BottleFixture()
+        let plist = fixture.bottle.infoPlist
+        let start: [String: Any] = ["Debug Mode": 0, "WINEDEBUG": "-all", "DXMT": 1, "CFBundleName": "Steam"]
+        try PropertyListSerialization.data(fromPropertyList: start, format: .xml, options: 0).write(to: plist)
+        func raw() throws -> [String: Any] {
+            try PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil) as! [String: Any]
+        }
+
+        var settings = try BottleSettings.load(from: plist)
+        #expect(!settings.logWineOutput)
+        settings.logWineOutput = true
+        try settings.save(to: plist)
+        #expect(try raw()["Debug Mode"] as? Int == 1)
+        #expect(try raw()["WINEDEBUG"] as? String == "err+all,fixme-all")
+        #expect(try BottleSettings.load(from: plist).logWineOutput)
+
+        settings.logWineOutput = false
+        try settings.save(to: plist)
+        #expect(try raw()["Debug Mode"] as? Int == 0)
+        #expect(try raw()["WINEDEBUG"] as? String == "-all")
+        #expect(try raw()["CFBundleName"] as? String == "Steam")
+    }
+
+    @Test func summarisesTheLinesThatExplainACrash() {
+        let report = WineLogReport(text: #"""
+        msync: up and running.
+        002c:err:virtual:try_map_free_area mmap() error Cannot allocate memory, range 0x7ffffffb0000-0x7ffffffe9000, unix_prot 0x3.
+        0024:err:module:import_dll Library xinput1_4.dll (which is needed by L"C:\\Games\\Game.exe") not found
+        0024:err:module:import_dll Library xinput1_4.dll (which is needed by L"C:\\Games\\Other.dll") not found
+        0024:err:module:loader_init Importing dlls for L"C:\\Games\\Game.exe" failed, status c0000135
+        0110:err:d3d11:d3d11_device_CreateTexture2D Failed to create texture
+        wine: Call from 00006FFFFFF8A1B4 to unimplemented function api-ms-win-core-foo-l1-1-0.dll.Bar, aborting
+        wine: Unhandled page fault on read access to 0000000000000000 at address 0000000140012345 (thread 0124), starting debugger...
+        00f0:err:rundll32:wWinMain Unable to find the entry point
+        """#)
+        #expect(report.summary == [
+            "Missing DLL: xinput1_4.dll",
+            "Unimplemented function: api-ms-win-core-foo-l1-1-0.dll.Bar",
+            "Crash: page fault on read access to 0000000000000000 at address 0000000140012345",
+            "Graphics errors: 1 (d3d, vkd3d or DXMT)",
+        ])
+        #expect(report.lines.map(\.kind) == [.noise, .noise, .module, .module, .module, .graphics, .unimplemented, .pageFault, .plain])
+    }
+
+    @Test func readsAroundTheHoleALaterLauncherRunLeaves() throws {
+        let fixture = try BottleFixture()
+        let log = WineLog.live(for: fixture.bottle)
+        try FileManager.default.createDirectory(at: WineLog.folder(for: fixture.bottle), withIntermediateDirectories: true)
+        try (Data("second run\n".utf8) + Data(count: 2000) + Data("first run, later\n".utf8)).write(to: log)
+        #expect(WineLog.read(log) == "second run\nfirst run, later\n")
+        #expect(WineLog.newest(for: fixture.bottle) == log)
+    }
+
+    @Test func capsTheLiveLogAndKeepsAFewCopies() throws {
+        let fixture = try BottleFixture()
+        let bottle = fixture.bottle
+        let log = WineLog.live(for: bottle)
+        try FileManager.default.createDirectory(at: WineLog.folder(for: bottle), withIntermediateDirectories: true)
+
+        try Data(repeating: UInt8(ascii: "x"), count: 5 << 20).write(to: log)
+        WineLog.enforceLimit(bottle)
+        let copies = WineLog.copies(for: bottle)
+        #expect(copies.count == 1)
+        #expect(WineLog.stored(log) == 0)
+        #expect(try Data(contentsOf: copies[0]).count == WineLog.keptTail)
+        #expect(WineLog.newest(for: bottle) == copies[0])
+
+        for second in 1...4 {
+            try Data("run \(second)\n".utf8).write(to: log)
+            WineLog.preserve(bottle, now: Date(timeIntervalSince1970: TimeInterval(second * 60)))
+        }
+        #expect(WineLog.copies(for: bottle).count == WineLog.keptCopies)
+
+        WineLog.clear(bottle)
+        #expect(WineLog.copies(for: bottle).isEmpty)
+        #expect(WineLog.newest(for: bottle) == nil)
+    }
+}

@@ -50,6 +50,8 @@ struct SettingsSheet: View {
                     toggleRow("MSync", detail: "Faster thread syncing. Leave on unless a game freezes.", isOn: $settings.msync)
                 }
                 group("Tools") {
+                    toggleRow("Log Wine output", detail: "Keeps Wine's errors so Logs can show why a game crashed.", isOn: $settings.logWineOutput)
+                    divider
                     HStack {
                         Text("Main program")
                             .font(.system(size: 13))

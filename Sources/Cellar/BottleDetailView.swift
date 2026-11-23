@@ -5,6 +5,7 @@ struct BottleDetailView: View {
     @Environment(BottleStore.self) private var store
     let bottle: Bottle
     @ViewState private var showingSettings = false
+    @ViewState private var showingLogs = false
 
     private var isRunning: Bool { store.running.contains(bottle.id) }
     private var settings: BottleSettings? { store.settings[bottle.id] }
@@ -33,6 +34,9 @@ struct BottleDetailView: View {
             if let settings {
                 SettingsSheet(bottle: bottle, settings: settings)
             }
+        }
+        .sheet(isPresented: $showingLogs) {
+            LogSheet(bottle: bottle, loggingOn: settings?.logWineOutput ?? false)
         }
     }
 
@@ -89,6 +93,13 @@ struct BottleDetailView: View {
                 Label("Settings", systemImage: "slider.horizontal.3")
             }
             .buttonStyle(QuietButtonStyle())
+            Button {
+                showingLogs = true
+            } label: {
+                Label("Logs", systemImage: "doc.text")
+            }
+            .buttonStyle(QuietButtonStyle())
+            .help("Wine's log for this bottle, with the lines that explain crashes marked")
             if isRunning {
                 Button {
                     store.stop(bottle)

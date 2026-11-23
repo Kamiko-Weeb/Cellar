@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// `Cellar --snapshot out.png` renders the window and both sheets to PNGs, in light and dark
+/// `Cellar --snapshot out.png` renders the window and the sheets to PNGs, in light and dark
 /// appearance, without putting anything on screen.
 @MainActor
 enum Snapshot {
@@ -16,7 +16,10 @@ enum Snapshot {
                 write(ContentView(), store: store, size: main, appearance: appearance, to: URL(fileURLWithPath: "\(base)-\(bottle.name)\(suffix).png"))
             }
             if let bottle = store.bottles.last, let settings = store.settings[bottle.id] {
-                write(SettingsSheet(bottle: bottle, settings: settings), store: store, size: CGSize(width: 520, height: 560), appearance: appearance, to: URL(fileURLWithPath: "\(base)-settings\(suffix).png"))
+                write(SettingsSheet(bottle: bottle, settings: settings), store: store, size: CGSize(width: 520, height: 620), appearance: appearance, to: URL(fileURLWithPath: "\(base)-settings\(suffix).png"))
+            }
+            if let bottle = store.bottles.first {
+                write(LogSheet(bottle: bottle, loggingOn: store.settings[bottle.id]?.logWineOutput ?? false), store: store, size: CGSize(width: 780, height: 580), appearance: appearance, to: URL(fileURLWithPath: "\(base)-logs\(suffix).png"))
             }
             write(NewBottleSheet(), store: store, size: CGSize(width: 460, height: 200), appearance: appearance, to: URL(fileURLWithPath: "\(base)-new-bottle\(suffix).png"))
         }

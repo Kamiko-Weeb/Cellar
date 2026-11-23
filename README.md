@@ -22,11 +22,12 @@ xattr -dr com.apple.quarantine /Applications/Cellar.app
 
 ## What it does
 
-- **Bottles sidebar** with a running indicator
+- **Bottles sidebar** with a running indicator. Cellar only checks for changes while it is the active app, so it stays out of the way while you play.
 - **Games grid** read from each bottle's Steam libraries, including libraries on other drive letters (an external SSD mapped to `D:`, for example). Clicking a poster runs `steam.exe -applaunch <id>`, so Steam launch options such as `-nobattleye` still apply.
 - **Programs** from the bottle's Start Menu shortcuts
 - **Run Program…** for any `.exe`, `.msi`, `.bat` or `.lnk`
-- **Settings** per bottle: renderer (D3DMetal, DXMT, DXVK), Metal FPS overlay, MSync
+- **Settings** per bottle: renderer (D3DMetal, DXMT, DXVK), Metal FPS overlay, MSync, and Log Wine output
+- **Logs** shows the newest Wine log for a bottle (with Log Wine output on), marks the lines that usually explain a crash (missing DLLs, d3d/vkd3d/DXMT errors, unimplemented functions, page faults) and sums them up at the top, for example "Missing DLL: xinput1_4.dll". Logs are capped at a few MB per bottle.
 - **New Bottle** builds a wrapper from Sikarugir's Template 1.0.27 and the `WS12WineSikarugir11.0_1` engine (Wine 11, the first engine Rockstar's launcher runs on)
 
 ## Build from source
@@ -41,7 +42,7 @@ Only the Command Line Tools are needed, not Xcode.
 
 Two Command Line Tools workarounds live in the code: `test.sh` points the compiler at the Swift Testing macro plugin, and the views use a `ViewState` alias because the macOS 27 SDK's `@State` macro plugin ships only with Xcode.
 
-`Cellar --snapshot out.png` renders every bottle, the settings sheet and the new-bottle sheet to PNGs in light and dark mode without opening a window. Set `CELLAR_BOTTLES_DIR` to point it at a folder of test bottles.
+`Cellar --snapshot out.png` renders every bottle, the settings, log and new-bottle sheets to PNGs in light and dark mode without opening a window. Set `CELLAR_BOTTLES_DIR` to point it at a folder of test bottles.
 
 ## Sikarugir quirks Cellar works around
 

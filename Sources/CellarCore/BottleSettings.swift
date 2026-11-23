@@ -49,6 +49,8 @@ public struct BottleSettings: Equatable, Sendable {
     public var graphics: GraphicsBackend
     public var metalHUD: Bool
     public var msync: Bool
+    /// Sikarugir's "Debug Mode" plus a WINEDEBUG that keeps errors, so Wine writes a log Cellar can show.
+    public var logWineOutput: Bool
     public var programPath: String
     /// The renderers this wrapper's layout can select.
     public var availableBackends: [GraphicsBackend]
@@ -57,12 +59,14 @@ public struct BottleSettings: Equatable, Sendable {
         graphics: GraphicsBackend,
         metalHUD: Bool,
         msync: Bool,
+        logWineOutput: Bool = false,
         programPath: String,
         availableBackends: [GraphicsBackend] = GraphicsBackend.allCases
     ) {
         self.graphics = graphics
         self.metalHUD = metalHUD
         self.msync = msync
+        self.logWineOutput = logWineOutput
         self.programPath = programPath
         self.availableBackends = availableBackends
     }
@@ -90,6 +94,7 @@ public struct BottleSettings: Equatable, Sendable {
             graphics: graphics,
             metalHUD: flag("METAL_HUD"),
             msync: flag("WINEMSYNC"),
+            logWineOutput: flag("Debug Mode"),
             programPath: dict["Program Name and Path"] as? String ?? "",
             availableBackends: hasDXMTSwitch ? GraphicsBackend.allCases : [.d3dMetal, .dxmt, .dxvk]
         )
@@ -108,8 +113,14 @@ public struct BottleSettings: Equatable, Sendable {
             }
             dict["METAL_HUD"] = metalHUD ? 1 : 0
             dict["WINEMSYNC"] = msync ? 1 : 0
+            // The launcher only writes Logs/LastRunWine.log with Debug Mode on, and only then honours WINEDEBUG.
+            dict["Debug Mode"] = logWineOutput ? 1 : 0
+            dict["WINEDEBUG"] = logWineOutput ? Self.loggingWineDebug : "-all"
         }
     }
+
+    /// Errors from every channel, without the flood of "fixme" notes.
+    static let loggingWineDebug = "err+all,fixme-all"
 
     /// Reads the plist, lets `body` change it, and writes it back in its original format.
     static func edit(_ url: URL, _ body: (inout [String: Any]) -> Void) throws {
