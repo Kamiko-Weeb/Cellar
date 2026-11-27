@@ -343,6 +343,12 @@ struct WineLogTests {
         #expect(try raw()["Debug Mode"] as? Int == 0)
         #expect(try raw()["WINEDEBUG"] as? String == "-all")
         #expect(try raw()["CFBundleName"] as? String == "Steam")
+
+        // A WINEDEBUG set by hand survives saves that don't flip the switch.
+        try BottleSettings.edit(plist) { $0["WINEDEBUG"] = "+relay" }
+        settings.metalHUD = true
+        try settings.save(to: plist)
+        #expect(try raw()["WINEDEBUG"] as? String == "+relay")
     }
 
     @Test func summarisesTheLinesThatExplainACrash() {
@@ -356,6 +362,7 @@ struct WineLogTests {
         wine: Call from 00006FFFFFF8A1B4 to unimplemented function api-ms-win-core-foo-l1-1-0.dll.Bar, aborting
         wine: Unhandled page fault on read access to 0000000000000000 at address 0000000140012345 (thread 0124), starting debugger...
         00f0:err:rundll32:wWinMain Unable to find the entry point
+        info:  DXMT: using a deferred context
         """#)
         #expect(report.summary == [
             "Missing DLL: xinput1_4.dll",
@@ -363,7 +370,7 @@ struct WineLogTests {
             "Crash: page fault on read access to 0000000000000000 at address 0000000140012345",
             "Graphics errors: 1 (d3d, vkd3d or DXMT)",
         ])
-        #expect(report.lines.map(\.kind) == [.noise, .noise, .module, .module, .module, .graphics, .unimplemented, .pageFault, .plain])
+        #expect(report.lines.map(\.kind) == [.noise, .noise, .module, .module, .module, .graphics, .unimplemented, .pageFault, .plain, .plain])
     }
 
     @Test func readsAroundTheHoleALaterLauncherRunLeaves() throws {

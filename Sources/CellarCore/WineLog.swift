@@ -159,7 +159,7 @@ public struct WineLogReport: Sendable {
         if lower.contains("unimplemented function") { return .unimplemented }
         if lower.contains("err:module") { return .module }
         if lower.contains("err:d3d") || lower.contains("err:vkd3d")
-            || (lower.contains("dxmt") && (lower.contains("err") || lower.contains("fail"))) {
+            || (lower.contains("dxmt") && (lower.contains("err:") || lower.contains("error") || lower.contains("fail"))) {
             return .graphics
         }
         if lower.hasPrefix("msync:") || lower.contains("err:virtual:try_map_free_area") { return .noise }

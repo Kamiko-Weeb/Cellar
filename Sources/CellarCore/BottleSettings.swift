@@ -114,8 +114,11 @@ public struct BottleSettings: Equatable, Sendable {
             dict["METAL_HUD"] = metalHUD ? 1 : 0
             dict["WINEMSYNC"] = msync ? 1 : 0
             // The launcher only writes Logs/LastRunWine.log with Debug Mode on, and only then honours WINEDEBUG.
-            dict["Debug Mode"] = logWineOutput ? 1 : 0
-            dict["WINEDEBUG"] = logWineOutput ? Self.loggingWineDebug : "-all"
+            // Touched only when the switch flips, so a WINEDEBUG set in Advanced Settings survives other saves.
+            if ((dict["Debug Mode"] as? NSNumber)?.boolValue ?? false) != logWineOutput {
+                dict["Debug Mode"] = logWineOutput ? 1 : 0
+                dict["WINEDEBUG"] = logWineOutput ? Self.loggingWineDebug : "-all"
+            }
         }
     }
 
