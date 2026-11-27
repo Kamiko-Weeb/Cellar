@@ -35,8 +35,6 @@ public enum BottleFactory {
         let destination = folder.appending(path: "\(folderName(for: name)).app")
         let taken = Bottle.discover(in: folder).contains { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }
         guard !taken, !fm.fileExists(atPath: destination.path) else { throw Failure.alreadyExists(name) }
-        // The launcher's setup step waits (forever) until no wineserver is running anywhere on the Mac.
-        guard !Wine.processCommands().contains(where: { $0.hasSuffix("/wineserver") }) else { throw Failure.otherBottleRunning }
 
         await status("Getting Wine…")
         let engine = try await cached(engineURL, as: "Engines/\(engineName).tar.xz")
@@ -71,9 +69,19 @@ public enum BottleFactory {
             throw error
         }
 
+        // The launcher's setup step waits (forever) until no wineserver is running anywhere on the Mac,
+        // so check right before it, not before the download, when a bottle may still be opened.
+        guard !Wine.processCommands().contains(where: { $0.hasSuffix("/wineserver") }) else {
+            try? fm.removeItem(at: destination)
+            throw Failure.otherBottleRunning
+        }
         await status("Setting up Windows… (about a minute)")
         _ = try await Wine.runToCompletion(bottle.launcher, ["WSS-wineprefixcreate"])
-        guard fm.fileExists(atPath: bottle.driveC.appending(path: "Program Files (x86)").path) else { throw Failure.setupFailed }
+        guard fm.fileExists(atPath: bottle.driveC.appending(path: "Program Files (x86)").path) else {
+            // removeItem deletes the prefix's links to your folders, never the folders they point at.
+            try? fm.removeItem(at: destination)
+            throw Failure.setupFailed
+        }
         return Bottle(url: destination)
     }
 

@@ -10,11 +10,6 @@ import Foundation
 public enum Wine {
     static let steamExe = #"C:\Program Files (x86)\Steam\steam.exe"#
 
-    /// Starts the wrapper's main program, or brings it forward if it's already open.
-    public static func launchMain(_ bottle: Bottle) throws {
-        try start(bottle, [])
-    }
-
     /// Steam hands `-applaunch` to its running instance, so this works whether Steam is open or not.
     public static func play(appID: Int, in bottle: Bottle) throws {
         try runScript(named: "play-\(appID)", #"start "" "\#(steamExe)" -applaunch \#(appID)"#, in: bottle)
@@ -23,8 +18,10 @@ public enum Wine {
     /// Opens a program, installer or shortcut. Windows' `start` handles every kind (and paths
     /// with spaces, which the launcher can't take), starting in the file's own folder.
     public static func run(_ file: URL, in bottle: Bottle) throws {
-        let folder = windowsPath(for: file.deletingLastPathComponent())
-        try runScript(named: "run-program", #"start "" /d "\#(folder)" "\#(windowsPath(for: file))""#, in: bottle)
+        // Batch files expand %…% even inside quotes, so "setup%20v2.exe" would lose its %2.
+        let folder = windowsPath(for: file.deletingLastPathComponent()).replacingOccurrences(of: "%", with: "%%")
+        let path = windowsPath(for: file).replacingOccurrences(of: "%", with: "%%")
+        try runScript(named: "run-program", #"start "" /d "\#(folder)" "\#(path)""#, in: bottle)
     }
 
     public static func openWineConfiguration(_ bottle: Bottle) throws {

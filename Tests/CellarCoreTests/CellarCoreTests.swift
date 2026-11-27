@@ -236,6 +236,16 @@ struct WineTests {
         #expect(Wine.windowsPath(for: file.deletingLastPathComponent()) == #"Z:\Users\player\Downloads"#)
     }
 
+    @Test func escapesPercentSignsInRunScripts() throws {
+        let fixture = try BottleFixture()
+        // The fixture has no launcher, so starting fails after the script is written.
+        #expect(throws: (any Error).self) {
+            try Wine.run(URL(fileURLWithPath: "/Users/player/Downloads/setup%20v2.exe"), in: fixture.bottle)
+        }
+        let script = try String(contentsOf: fixture.bottle.driveC.appending(path: "cellar/run-program.bat"), encoding: .utf8)
+        #expect(script.contains(#""Z:\Users\player\Downloads\setup%%20v2.exe""#))
+    }
+
     @Test func bottleEqualityIgnoresTrailingSlash() {
         let plain = Bottle(url: URL(fileURLWithPath: "/x/Steam.app"))
         let listed = Bottle(url: URL(fileURLWithPath: "/x/Steam.app/", isDirectory: true))
